@@ -852,7 +852,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             cur_len = 1
 
             # put model in generation mode if it has one
-            if hasattr(self.model, "decoder") and hasattr(self.model.decoder, "generation_mode"):
+            if hasattr(self, "model") and hasattr(self.model, "decoder") and hasattr(self.model.decoder, "generation_mode"):
                 self.model.decoder.generation_mode = True
         else:
             encoder_inputs = None
