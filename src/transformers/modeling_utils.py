@@ -852,7 +852,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             cur_len = 1
 
             # put model in generation mode if it has one
-            if hasattr(self, "model") and hasattr(self.model, "decoder") and hasattr(self.model.decoder, "generation_mode"):
+            if (
+                hasattr(self, "model")
+                and hasattr(self.model, "decoder")
+                and hasattr(self.model.decoder, "generation_mode")
+            ):
                 self.model.decoder.generation_mode = True
         else:
             encoder_inputs = None
@@ -1209,7 +1213,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             # re-order internal states
             # TODO: The T5 is obviously an ugly hack to make beam search work for T5 for the moment
-            if past is not None and not (hasattr(self.config, "architectures") and self.config.architectures[0] == "T5WithLMHeadModel"):
+            if past is not None and not (
+                hasattr(self.config, "architectures")
+                and isinstance(self.config.architectures, list)
+                and self.config.architectures[0] == "T5WithLMHeadModel"
+            ):
                 past = self._reorder_cache(past, beam_idx)
 
             # extend attention_mask for new generated input if only decoder
