@@ -328,7 +328,7 @@ class PreTrainedTokenizer(object):
         # inputs and kwargs for saving and re-loading (see ``from_pretrained`` and ``save_pretrained``)
         self.init_inputs = ()
         self.init_kwargs = {}
-
+        print('SPECIAL_TOKENS_ATTRIBUTES: ', self.SPECIAL_TOKENS_ATTRIBUTES)
         for key, value in kwargs.items():
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
                 if key == "additional_special_tokens":
@@ -390,10 +390,12 @@ class PreTrainedTokenizer(object):
             assert tokenizer.unk_token == '<unk>'
 
         """
+        print('*inputs: ', inputs)
         return cls._from_pretrained(*inputs, **kwargs)
 
     @classmethod
     def _from_pretrained(cls, pretrained_model_name_or_path, *init_inputs, **kwargs):
+        print('kwargs: ', kwargs)
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
@@ -401,9 +403,12 @@ class PreTrainedTokenizer(object):
         local_files_only = kwargs.pop("local_files_only", False)
 
         s3_models = list(cls.max_model_input_sizes.keys())
+        print('s3_models: ', s3_models)
         vocab_files = {}
         init_configuration = {}
+        logger.debug('pretrained_model_name_or_path: {}'.format(pretrained_model_name_or_path))
         if pretrained_model_name_or_path in s3_models:
+            print('if...')
             # Get the vocabulary from AWS S3 bucket
             for file_id, map_list in cls.pretrained_vocab_files_map.items():
                 vocab_files[file_id] = map_list[pretrained_model_name_or_path]
@@ -413,6 +418,7 @@ class PreTrainedTokenizer(object):
             ):
                 init_configuration = cls.pretrained_init_configuration[pretrained_model_name_or_path].copy()
         else:
+            print('else..')
             # Get the vocabulary from local files
             logger.info(
                 "Model name '{}' not found in model shortcut name list ({}). "

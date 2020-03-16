@@ -11,8 +11,9 @@ from tqdm import tqdm
 
 from modeling_bertabs import BertAbs, build_predictor
 from transformers import BertTokenizer
+from configuration_bertabs import BertAbsConfig
 
-from .utils_summarization import (
+from utils_summarization import (
     CNNDMDataset,
     build_mask,
     compute_token_type_ids,
@@ -22,15 +23,27 @@ from .utils_summarization import (
 
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
-
+# logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+logging.basicConfig(
+        level=logging.DEBUG,
+        format='[%(asctime)-15s] %(levelname)7s >> %(message)s (%(filename)s:%(lineno)d, %(funcName)s())',
+        datefmt='%Y-%m-%d %H:%M:%S',
+    )
 
 Batch = namedtuple("Batch", ["document_names", "batch_size", "src", "segs", "mask_src", "tgt_str"])
 
 
 def evaluate(args):
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", do_lower_case=True)
-    model = BertAbs.from_pretrained("bertabs-finetuned-cnndm")
+    # tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", do_lower_case=True)
+    tokenizer = BertTokenizer.from_pretrained("/data/wanyao/ghproj_d/transformers/summarization/")
+    # sys.exit()
+    print('load model...')
+    # config = BertAbsConfig.from_json_file('/data/wanyao/ghproj_d/transformers/summarization/config.json')
+    # model = BertAbs.from_pretrained("/data/wanyao/ghproj_d/transformers/summarization/", config=config)
+    model = BertAbs.from_pretrained("/data/wanyao/ghproj_d/transformers/summarization/")
+
+    # model = BertAbs.from_pretrained("bertabs-finetuned-cnndm")
+
     model.to(args.device)
     model.eval()
 
@@ -47,7 +60,7 @@ def evaluate(args):
         import rouge
         import nltk
 
-        nltk.download("punkt")
+        # nltk.download("punkt")
         rouge_evaluator = rouge.Rouge(
             metrics=["rouge-n", "rouge-l"],
             max_n=2,
@@ -80,7 +93,11 @@ def evaluate(args):
     logger.info("  Alpha (length penalty) = %.2f", args.alpha)
     logger.info("  Trigrams %s be blocked", ("will" if args.block_trigram else "will NOT"))
 
-    for batch in tqdm(data_iterator):
+    iterator = 0
+    for batch in data_iterator:
+        # print('batch-: ', batch)
+        print('batch-src: ', batch.src.size())
+        print(batch.src)
         batch_data = predictor.translate_batch(batch)
         translations = predictor.from_batch(batch_data)
         summaries = [format_summary(t) for t in translations]
@@ -90,7 +107,15 @@ def evaluate(args):
             reference_summaries += batch.tgt_str
             generated_summaries += summaries
 
+        logging.info('iterator: {}'.format(iterator))
+        iterator += 1
+
+        if iterator >= 1:
+            break
+
     if args.compute_rouge:
+        print('generated_summaries: ', generated_summaries)
+        print('reference_summaries: ', reference_summaries)
         scores = rouge_evaluator.get_scores(generated_summaries, reference_summaries)
         str_scores = format_rouge_scores(scores)
         save_rouge_scores(str_scores)
@@ -184,6 +209,7 @@ def save_rouge_scores(str_scores):
 
 def build_data_iterator(args, tokenizer):
     dataset = load_and_cache_examples(args, tokenizer)
+    # dataset.__getitem__(0)
     sampler = SequentialSampler(dataset)
 
     def collate_fn(data):
@@ -293,9 +319,11 @@ def main():
     )
     args = parser.parse_args()
 
+    print('torch.cuda.is_available(): ', torch.cuda.is_available())
+    print('args.no_cuda: ', args.no_cuda)
     # Select device (distibuted not available)
     args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-
+    print('args.device: ', args.device)
     # Check the existence of directories
     if not args.summaries_output_dir:
         args.summaries_output_dir = args.documents_dir

@@ -38,6 +38,7 @@ class CNNDMDataset(Dataset):
 
         self.documents = []
         story_filenames_list = os.listdir(path)
+        print('story_filenames_list: ', story_filenames_list)
         for story_filename in story_filenames_list:
             if "summary" in story_filename:
                 continue
@@ -46,13 +47,16 @@ class CNNDMDataset(Dataset):
                 continue
             self.documents.append(path_to_story)
 
+        # print('self.documents: ', self.documents)
     def __len__(self):
         """ Returns the number of documents. """
         return len(self.documents)
 
     def __getitem__(self, idx):
+
         document_path = self.documents[idx]
         document_name = document_path.split("/")[-1]
+        # print('document_path: ', document_path)
         with open(document_path, encoding="utf-8") as source:
             raw_story = source.read()
             story_lines, summary_lines = process_story(raw_story)

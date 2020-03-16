@@ -189,6 +189,7 @@ class PretrainedConfig(object):
             assert unused_kwargs == {'foo': False}
 
         """
+
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
         return cls.from_dict(config_dict, **kwargs)
 
@@ -215,18 +216,21 @@ class PretrainedConfig(object):
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         local_files_only = kwargs.pop("local_files_only", False)
-
+        logger.info('pretrained_config_archive_map: {}'.format(pretrained_config_archive_map))
         if pretrained_config_archive_map is None:
             pretrained_config_archive_map = cls.pretrained_config_archive_map
-
+        print('pretrained_model_name_or_path: ', pretrained_model_name_or_path)
         if pretrained_model_name_or_path in pretrained_config_archive_map:
+            print('true.')
             config_file = pretrained_config_archive_map[pretrained_model_name_or_path]
+            print('config_file0: ', config_file)
         elif os.path.isdir(pretrained_model_name_or_path):
             config_file = os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
         elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             config_file = pretrained_model_name_or_path
         else:
             config_file = hf_bucket_url(pretrained_model_name_or_path, postfix=CONFIG_NAME)
+        print('config_file: ', config_file)
 
         try:
             # Load from URL or cache if already cached

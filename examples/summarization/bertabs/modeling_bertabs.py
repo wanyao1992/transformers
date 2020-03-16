@@ -29,7 +29,7 @@ from torch.nn.init import xavier_uniform_
 
 from configuration_bertabs import BertAbsConfig
 from transformers import BertConfig, BertModel, PreTrainedModel
-
+import logging
 
 MAX_SIZE = 5000
 
@@ -37,6 +37,9 @@ BERTABS_FINETUNED_MODEL_MAP = {
     "bertabs-finetuned-cnndm": "https://s3.amazonaws.com/models.huggingface.co/bert/remi/bertabs-finetuned-cnndm-extractive-abstractive-summarization-pytorch_model.bin",
 }
 
+logger = logging.getLogger(__name__)
+
+import sys
 
 class BertAbsPreTrainedModel(PreTrainedModel):
     config_class = BertAbsConfig
@@ -50,7 +53,9 @@ class BertAbs(BertAbsPreTrainedModel):
         super().__init__(args)
         self.args = args
         self.bert = Bert()
+        logger.debug('self.bert: {}'.format(self.bert))
 
+        logger.debug('BertAbs-init')
         # If pre-trained weights are passed for Bert, load these.
         load_bert_pretrained_extractive = True if bert_extractive_checkpoint else False
         if load_bert_pretrained_extractive:
@@ -169,6 +174,8 @@ class TransformerDecoder(nn.Module):
     # forward(input_ids, attention_mask, encoder_hidden_states, encoder_attention_mask)
     # def forward(self, input_ids, state, attention_mask=None, memory_lengths=None,
     # step=None, cache=None, encoder_attention_mask=None, encoder_hidden_states=None, memory_masks=None):
+    # dec_out, dec_states = self.model.decoder(decoder_input, src_features, dec_states, step=step)
+
     def forward(
         self,
         input_ids,
@@ -188,17 +195,32 @@ class TransformerDecoder(nn.Module):
         tgt = input_ids
         memory_bank = encoder_hidden_states
         memory_mask = encoder_attention_mask
+        print('tgt: ', tgt.size())
+        print(tgt)
+        print('memory_bank: ', memory_bank.size())
+        print(memory_bank)
+        print('memory_mask: ') # None
+        print(memory_mask)
 
-        # src_words = state.src
         src_words = state.src
         src_batch, src_len = src_words.size()
-
         padding_idx = self.embeddings.padding_idx
 
+        print('src_words: ', src_words.size())
+        print(src_words)
+        print('src_batch: ', src_batch)
+        print('src_len: ', src_len)
+        print('padding_idx: ', padding_idx)
         # Decoder padding mask
         tgt_words = tgt
         tgt_batch, tgt_len = tgt_words.size()
         tgt_pad_mask = tgt_words.data.eq(padding_idx).unsqueeze(1).expand(tgt_batch, tgt_len, tgt_len)
+        print('tgt_words: ', tgt_words.size())
+        print(tgt_words)
+        print('tgt_batch: ', tgt_batch)
+        print('tgt_len: ', tgt_len)
+        print('tgt_pad_mask: ', tgt_pad_mask.size())
+        print(tgt_pad_mask)
 
         # Encoder padding mask
         if memory_mask is not None:
@@ -206,16 +228,19 @@ class TransformerDecoder(nn.Module):
             src_pad_mask = memory_mask.expand(src_batch, tgt_len, src_len)
         else:
             src_pad_mask = src_words.data.eq(padding_idx).unsqueeze(1).expand(src_batch, tgt_len, src_len)
-
+        print('src_pad_mask: ', src_pad_mask.size())
+        print(src_pad_mask)
         # Pass through the embeddings
         emb = self.embeddings(input_ids)
         output = self.pos_emb(emb, step)
         assert emb.dim() == 3  # len x batch x embedding_dim
+        print('state.cache: ', state.cache)
 
         if state.cache is None:
             saved_inputs = []
 
         for i in range(self.num_layers):
+            print('layer_{}...'.format(i))
             prev_layer_input = None
             if state.cache is None:
                 if state.previous_input is not None:
@@ -235,10 +260,11 @@ class TransformerDecoder(nn.Module):
 
         if state.cache is None:
             saved_inputs = torch.stack(saved_inputs)
-
+        print('state.cache-: ', state.cache)
         output = self.layer_norm(output)
 
         if state.cache is None:
+            print('update_state...')
             state = state.update_state(tgt, saved_inputs)
 
         # Decoders in transformers return a tuple. Beam search will fail
@@ -315,7 +341,7 @@ class TransformerDecoderLayer(nn.Module):
             inputs (`FloatTensor`): `[batch_size x 1 x model_dim]`
             memory_bank (`FloatTensor`): `[batch_size x src_len x model_dim]`
             src_pad_mask (`LongTensor`): `[batch_size x 1 x src_len]`
-            tgt_pad_mask (`LongTensor`): `[batch_size x 1 x 1]`
+            tgt_pad_mask (`BoolTensor`): `[batch_size x 1 x 1]`
 
         Returns:
             (`FloatTensor`, `FloatTensor`, `FloatTensor`):
@@ -325,6 +351,12 @@ class TransformerDecoderLayer(nn.Module):
             * all_input `[batch_size x current_step x model_dim]`
 
         """
+        # print('self.mask: ', self.mask.size(), self.mask.type())
+        # print('tgt_pad_mask: ', tgt_pad_mask.size(), tgt_pad_mask.type())
+        tgt_pad_mask = tgt_pad_mask.byte()
+        print('tgt_pad_mask: ', tgt_pad_mask.size())
+        print(tgt_pad_mask)
+        print('self.mask')
         dec_mask = torch.gt(tgt_pad_mask + self.mask[:, : tgt_pad_mask.size(1), : tgt_pad_mask.size(1)], 0)
         input_norm = self.layer_norm_1(inputs)
         all_input = input_norm
@@ -580,7 +612,7 @@ class TransformerDecoderState(DecoderState):
         Contains attributes that need to be updated in self.beam_update().
         """
         if self.previous_input is not None and self.previous_layer_inputs is not None:
-            return (self.previous_input, self.previous_layer_inputs, self.src)
+            return  (self.previous_input, self.previous_layer_inputs, self.src)
         else:
             return (self.src,)
 
@@ -794,6 +826,8 @@ class Translator(object):
            Shouldn't need the original dataset.
         """
         with torch.no_grad():
+            print('translate_batch-src: ', batch.src.size())
+            print(batch.src)
             return self._fast_translate_batch(batch, self.max_length, min_length=self.min_length)
 
     # Where the beam search lives
@@ -806,15 +840,27 @@ class Translator(object):
         # Instead of just looking at the size of the arguments we encapsulate
         # a size argument.
         # Where is it defined?
+        print('_fast_translate_batch-src: ', batch.src.size())
+        print(batch.src)
+
         beam_size = self.beam_size
         batch_size = batch.batch_size
         src = batch.src
         segs = batch.segs
         mask_src = batch.mask_src
-
+        print('_fast_translate_batch...')
+        print('src: ', src.size())
+        print(src)
+        print('segs: ', segs.size())
+        print(segs)
+        print('mask_src: ', mask_src.size())
+        print(mask_src)
         src_features = self.model.bert(src, segs, mask_src)
+        print('src_features: ', src_features.size())
+
         dec_states = self.model.decoder.init_decoder_state(src, src_features, with_cache=True)
         device = src_features.device
+        print('dec_states: ', dec_states)
 
         # Tile states and memory beam_size times.
         dec_states.map_batch_fn(lambda state, dim: tile(state, beam_size, dim=dim))
@@ -842,7 +888,7 @@ class Translator(object):
             decoder_input = decoder_input.transpose(0, 1)
 
             dec_out, dec_states = self.model.decoder(decoder_input, src_features, dec_states, step=step)
-
+            sys.exit(1)
             # Generator forward.
             log_probs = self.generator.forward(dec_out.transpose(0, 1).squeeze(0))
             vocab_size = log_probs.size(-1)
